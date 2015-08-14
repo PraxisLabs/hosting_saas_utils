@@ -16,11 +16,11 @@ function hosting_saas_utils_menu() {
 }
 
 /**
- * Configuration form for hosting_saas
+ * Configuration form for hosting_saas_utils
  *
  * @see hosting_saas_utils_settings_submit
  */
-function hosting_saas_utils_settings() {
+function hosting_saas_utils_settings($form, &$form_state) {
   /* New user / uid1 */
   $user_options = array(1 => t('New user (recommended)'), 0 => t('Admin user (uid1, has all permissions)'));
 
@@ -56,15 +56,13 @@ function hosting_saas_utils_settings() {
     '#required' => FALSE,
   );
 
-  _hosting_saas_utils_append_variables($form);
+  _hosting_saas_utils_append_variables($form, $form_state);
 
   $form['submit'] = array(
     '#type' => 'submit',
     '#value' => 'Submit',
   );
 
-  // TODO: When saving, delete removed values
- 
   // Can't use system_settings_form() because of the dynamic variables array.
   return $form;
 }
@@ -72,30 +70,61 @@ function hosting_saas_utils_settings() {
 /**
  * Helper function to add dynamically generated variable fields.
  */
-function _hosting_saas_utils_append_variables(&$form) {
-  $form['hosting_saas_utils_variables'] = array(
+function _hosting_saas_utils_append_variables(&$form, &$form_state) {
+  $form['hosting_saas_utils_variables_fieldset'] = array(
     '#type' => 'fieldset',
     '#title' => t('Variables'),
     '#collapsible' => TRUE,
     '#collapsed' => FALSE,
     '#description' => t("Values to assign to site variables based on POST variables. This allows a 'bridge' from your subscription form to a site's variable. Exemple: whateveryouwant => site_name."),
+    '#prefix' => '<div id="hosting-saas-utils-fieldset-wrapper">',
+    '#suffix' => '</div>',
   );
+  
+  if (!isset($form_state['hosting_saas_utils_variables'])) {
+    $variables = variable_get('hosting_saas_utils_variables', array());
+    foreach ($variables as $key => $values) {
+      $form_state['hosting_saas_utils_variables'][] = array('key' => $values['key'], 'name' => $values['name']);
+    }
 
-  $counter = 0;
-  foreach (variable_get('hosting_saas_utils_variables', array()) as $index => $values) {
-    _hosting_saas_utils_append_variable_fieldset($form, $counter, $values['key'], $values['name']);
+    $form_state['hosting_saas_utils_variables'][] = array('key' => '', 'name' => '');
+  }
+  else {
+    foreach ($form_state['hosting_saas_utils_variables'] as $counter => $variable) {
+      if (isset($form_state['values']['hosting_saas_utils_variable_key_' . $counter])) {
+        if ($form_state['hosting_saas_utils_variables'][$counter]['key'] <> $form_state['values']['hosting_saas_utils_variable_key_' . $counter] || $form_state['hosting_saas_utils_variables'][$counter]['name'] <> $form_state['values']['hosting_saas_utils_variable_name_' . $counter]) {
+          $form_state['hosting_saas_utils_variables'][$counter]['key'] = $form_state['values']['hosting_saas_utils_variable_key_' . $counter];
+        }
+        if ($form_state['hosting_saas_utils_variables'][$counter]['name'] <> $form_state['values']['hosting_saas_utils_variable_name_' . $counter]) {
+          $form_state['hosting_saas_utils_variables'][$counter]['name'] = $form_state['values']['hosting_saas_utils_variable_name_' . $counter];
+        }
 
-    $counter += 1;
+      }
+    }
+  }
+
+  foreach ($form_state['hosting_saas_utils_variables'] as $counter => $variable) {
+    _hosting_saas_utils_append_variable_fieldset($form, $counter, $variable['key'], $variable['name']);
   }
 
   _hosting_saas_utils_append_variable_fieldset($form, $counter);
+
+  $form['hosting_saas_utils_variables_fieldset']['add_variable'] = array(
+    '#type' => 'submit',
+    '#value' => t('Add more'),
+    '#submit' => array('hosting_saas_utils_add_variable'),
+    '#ajax' => array(
+      'callback' => 'hosting_saas_utils_ajax_callback',
+      'wrapper' => 'hosting-saas-utils-fieldset-wrapper',
+    ),
+  );
 }
 
 /**
  * Helper function to add a variable set fieldset
  */
 function _hosting_saas_utils_append_variable_fieldset(&$form, $index, $variable_key = '', $variable_name = '') {
-  $form['hosting_saas_utils_variables'][$index] = array(
+  $form['hosting_saas_utils_variables_fieldset'][$index] = array(
     '#type' => 'fieldset',
     '#title' => t('Variable set'),
     '#collapsible' => FALSE,
@@ -103,7 +132,7 @@ function _hosting_saas_utils_append_variable_fieldset(&$form, $index, $variable_
   );
   
   // TODO: If key is supplied, value is mandatory.
-  $form['hosting_saas_utils_variables'][$index]['hosting_saas_utils_variable_key_' . $index] = array(
+  $form['hosting_saas_utils_variables_fieldset'][$index]['hosting_saas_utils_variable_key_' . $index] = array(
     '#type' => 'textfield',
     '#title' => t('Variable POST key'),
     '#description' => t("This is the arbitrary name of the POST argument you will give the variable."),
@@ -111,7 +140,7 @@ function _hosting_saas_utils_append_variable_fieldset(&$form, $index, $variable_
     '#required' => FALSE,
   );
 
-  $form['hosting_saas_utils_variables'][$index]['hosting_saas_utils_variable_name_' . $index] = array(
+  $form['hosting_saas_utils_variables_fieldset'][$index]['hosting_saas_utils_variable_name_' . $index] = array(
     '#type' => 'textfield',
     '#title' => t('Drupal variable name'),
     '#description' => t("This is the name of the variable that will be set in the new site using variable_set()."),
@@ -122,8 +151,8 @@ function _hosting_saas_utils_append_variable_fieldset(&$form, $index, $variable_
 
 function hosting_saas_utils_settings_submit(&$form, &$form_state) {
   $variables = array();
-  foreach (element_children($form['hosting_saas_utils_variables']) as $index) {
-//    index is just the number of the child
+  foreach ($form_state['hosting_saas_utils_variables'] as $index => $val) {
+    // index is just the number of the child
     $key = $form_state['values']['hosting_saas_utils_variable_key_' . $index];
     $name = $form_state['values']['hosting_saas_utils_variable_name_' . $index];
 
@@ -133,4 +162,60 @@ function hosting_saas_utils_settings_submit(&$form, &$form_state) {
   }
 
   variable_set('hosting_saas_utils_variables', $variables);
+}
+
+/**
+ * Callback for both ajax-enabled buttons.
+ *
+ * Selects and returns the fieldset with the names in it.
+ */
+function hosting_saas_utils_ajax_callback($form, $form_state) {
+  return $form['hosting_saas_utils_variables_fieldset'];
+}
+
+/**
+ * Submit handler for the "add-more-variable" button.
+ *
+ * Add empty variable and causes a rebuild.
+ */
+function hosting_saas_utils_add_variable($form, &$form_state) {
+  $form_state['hosting_saas_utils_variables'][] = array('name' => '', 'key' => '');
+  $form_state['rebuild'] = TRUE;
+}
+
+/**
+ *  Imlements hook_hosting_restapi_check_access() to store POST data.
+ */
+function hosting_saas_utils_hosting_restapi_task_added($task) {
+  $bridged_values = variable_get('hosting_saas_utils_bridged_values', array());
+  $variables = variable_get('hosting_saas_utils_variables', array());
+
+  $site_variables = array();
+  foreach ($variables as $values) {
+    if (!empty($_POST[$values['key']])) {
+      $site_variables[$values['name']] = $_POST[$values['key']];
+    }
+  }
+
+  if (!empty($site_variables)) {
+    $bridged_values[$task->task_args['new_uri']] = $site_variables;
+    variable_set('hosting_saas_utils_bridged_values', $bridged_values);
+  }
+}
+
+// hook_insert
+function hosting_saas_utils_node_insert($node) {
+  $bridged_values = variable_get('hosting_saas_utils_bridged_values', array());
+
+  if ($node->type == 'site' && !empty($bridged_values[$node->title])) {
+    hosting_variables_set_site_variables($node->nid, $bridged_values[$node->title]);
+  }
+}
+
+/**
+ * Implements hook_post_hosting_TASK_TYPE_task().
+ */
+function hosting_saas_utils_post_hosting_verify_task($task, $data) {
+  // TODO: Option to unset the settings configuration post-verify
+  // (so the user can change them).
 }
