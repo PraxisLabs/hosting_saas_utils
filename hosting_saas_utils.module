@@ -221,6 +221,49 @@ function hosting_saas_utils_hosting_restapi_task_added($task) {
     $bridged_values[$task->task_args['new_uri']] = $site_variables;
     variable_set('hosting_saas_utils_bridged_values', $bridged_values);
   }
+
+  _hosting_task_utils_generate_todo($task->task_args['new_uri']);
+}
+
+/**
+ * Helper function to set variable array.
+ */
+function _hosting_task_utils_generate_todo($uri) {
+  $todo = variable_get('hosting_saas_utils_todo', array());
+  $client_user_email_key = variable_get('hosting_saas_utils_user_email', '');
+  $client_user_name_key = variable_get('hosting_saas_utils_user_name', '');
+  if (!empty($client_user_email_key) && !empty($_POST[$client_user_email_key])) {
+    if (!empty($client_user_name_key)) {
+      $client_user = array(
+        'name' => $_POST[$client_user_name_key],
+        'email' => $_POST[$client_user_email_key],
+      );
+    }
+    else {
+      $client_user = array(
+        'name' => $_POST[$client_user_email_key],
+        'email' => $_POST[$client_user_email_key],
+      );
+    }
+
+    if (variable_get('hosting_saas_utils_create_new_user', 1)) {
+      $todo[$uri]['create_new_user'] = $client_user;
+    }
+    else {
+      $todo[$uri]['change_admin_user'] = $client_user;
+    }
+
+    $role_name = variable_get('hosting_saas_utils_user_role', '');
+    if (!empty($role_name)) {
+      $todo[$uri]['set_user_role'] = $role_name;
+    }
+
+    if (!empty(variable_get('hosting_saas_utils_send_email', FALSE))) {
+      $todo[$uri]['send_email'] = TRUE;
+    }
+  }
+
+  variable_set('hosting_saas_utils_todo', $todo);
 }
 
 // hook_insert
@@ -242,4 +285,39 @@ function hosting_saas_utils_node_insert($node) {
 function hosting_saas_utils_post_hosting_verify_task($task, $data) {
   // TODO: Option to unset the settings configuration post-verify
   // (so the user can change them).
+
+  $site = node_load($task->rid);
+
+  if (!empty($site)) {
+    $todo = variable_get('hosting_saas_utils_todo', array());
+
+    if (!empty($todo[$site->hosting_name])) {
+      $new_user = $todo[$site->hosting_name]['create_new_user'];
+
+      if (!empty($new_user)) {
+        drush_log(t('[hosting_saas_utils] Creating new user: !name (!email).', array('!name' => $new_user['name'], '!email' => $new_user['email'])));
+        //TODO
+      }
+      else {
+        $client_user =  $todo[$site->hosting_name]['change_admin_user'];
+
+        if (!empty($client_user)) {
+          drush_log(t('[hosting_saas_utils] Assigning new values to admin user: !name (!email).', array('!name' => $client_user['name'], '!email' => $client_user['email'])));
+          // TODO
+        }
+      }
+
+      if (!empty($todo[$site->hosting_name]['set_user_role'])) {
+        drush_log(t('[hosting_saas_utils] Assigning role: !role', array('!role' => $todo[$site->hosting_name]['set_user_role'])));
+        // TODO
+      }
+
+      //   send_email
+      if ($todo[$site->hosting_name]['send_email']) {
+        // TODO
+        drush_log(t('[hosting_saas_utils] Sent registration email '));
+      }
+
+    }
+  }
 }
