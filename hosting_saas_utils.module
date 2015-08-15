@@ -56,6 +56,13 @@ function hosting_saas_utils_settings($form, &$form_state) {
     '#required' => FALSE,
   );
 
+  $form['hosting_saas_utils_send_email'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Send client user a registration email.'),
+    '#description' => t('This will use the default user registration message. You can set the message in your template site or enter it in the Variables tab of the site node.'),
+    '#default_value' => variable_get('hosting_saas_utils_send_email', 1),
+  );
+
   _hosting_saas_utils_append_variables($form, $form_state);
 
   $form['submit'] = array(
@@ -162,6 +169,19 @@ function hosting_saas_utils_settings_submit(&$form, &$form_state) {
   }
 
   variable_set('hosting_saas_utils_variables', $variables);
+
+  $settings_to_save = array(
+    'create_new_user',
+    'user_email',
+    'user_name',
+    'user_role',
+    'send_email',
+  );
+
+  foreach ($settings_to_save as $setting) {
+    $variable_name = 'hosting_saas_utils_' . $setting;
+    variable_set($variable_name, $form_state['values'][$variable_name]);
+  }
 }
 
 /**
@@ -209,6 +229,10 @@ function hosting_saas_utils_node_insert($node) {
 
   if ($node->type == 'site' && !empty($bridged_values[$node->title])) {
     hosting_variables_set_site_variables($node->nid, $bridged_values[$node->title]);
+
+    // This variable is meant to be temporary
+    unset($bridged_values[$node->title]);
+    variable_set('hosting_saas_utils_bridged_values', $bridged_values);
   }
 }
 
