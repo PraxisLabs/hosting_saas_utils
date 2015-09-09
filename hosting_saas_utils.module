@@ -258,7 +258,8 @@ function _hosting_task_utils_generate_todo($uri) {
       $todo[$uri]['set_user_role'] = $role_name;
     }
 
-    if (!empty(variable_get('hosting_saas_utils_send_email', FALSE))) {
+    $send_email = variable_get('hosting_saas_utils_send_email', FALSE);
+    if (!empty($send_email)) {
       $todo[$uri]['send_email'] = TRUE;
     }
   }
